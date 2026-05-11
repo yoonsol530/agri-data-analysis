@@ -1,7 +1,7 @@
 # agri-data-analysis
 프로젝트 제목: 🥬 농산물 조달 리스크 분석 대시보드
 
-서비스 배포 주소: []
+서비스 배포 주소: https://agri-data-analysis-vlkjqjpztlehkf9dheid38.streamlit.app/
 
 프롬프트 링크: (링크)
 
@@ -14,12 +14,12 @@
 
 주요 기술: Python, Pandas, SQLite3, Streamlit.
 
-2. 데이터베이스 설계 및 전처리 (Table 3개 구성)
+2. 데이터베이스 설계 및 클린징 (Table 3개 구성)
 데이터 설명: "공공데이터포털 가격 데이터와 기상청 강수량 데이터를 활용함"
 
 Table 1: price_tab (Fact Table)
 전국 도매시장별 품목 단가 데이터.
-전처리: 콤마(,) 제거 및 수치형 변환, 단위를 kg당 단가로 표준화.
+클린징: 콤마(,) 제거 및 수치형 변환, 유통 단위를 kg당 단가로 표준화.
 
 Table 2: weather_tab (Environmental Table)
 일별 전국 평균 강수량 관측 데이터.
@@ -28,7 +28,7 @@ Table 3: item_master (Dimension Table)
 품목별 카테고리(엽채류, 양념채소 등) 및 저장성 특성을 정의한 기준 정보 테이블.
 
 3. 주요 문제 해결 사례 (Troubleshooting)
-날짜 포맷 정규화 (1970년 에러): 엑셀의 정수형 날짜 데이터가 시스템상 Epoch Time(1970-01-01)으로 오인되는 결함을 발견. pd.to_datetime 로직을 정교화하여 데이터 손실 없이 완벽히 복구함.
+날짜 포맷 정규화 (1970년 에러): 엑셀의 정수형 날짜 데이터가 시스템상 Epoch Time(1970-01-01)으로 오인되는 결함을 발견. pd.to_datetime 로직을 정교화하여 데이터 손실 없이 복구함.
 
 로딩 속도 최적화: 매번 파일을 다시 읽는 비효율을 해결하기 위해 st.cache_resource를 도입. DB 연결을 캐싱하여 품목 변경 시 즉각적인 반응 속도를 구현함.
 
