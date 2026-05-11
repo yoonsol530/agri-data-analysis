@@ -3,7 +3,7 @@
 
 서비스 배포 주소: https://agri-data-analysis-vlkjqjpztlehkf9dheid38.streamlit.app/
 
-프롬프트 링크: (링크)
+프롬프트 링크: https://gemini.google.com/share/3119462bd907
 
 1. 프로젝트 개요
 
