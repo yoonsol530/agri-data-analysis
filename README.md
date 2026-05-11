@@ -1,7 +1,7 @@
 # agri-data-analysis
 프로젝트 제목: 🥬 농산물 조달 리스크 분석 대시보드
 
-서비스 배포 주소: https://agri-data-analysis-vlkjqjpztlehkf9dheid38.streamlit.app/
+서비스 배포 주소: https://agri-data-analysis-vw9h8xpkaupwrkokqjkswb.streamlit.app/
 
 프롬프트 링크: https://gemini.google.com/share/3119462bd907
 
