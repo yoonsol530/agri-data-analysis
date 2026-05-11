@@ -4,7 +4,7 @@ import sqlite3
 import glob
 import numpy as np
 
-# --- 1. 데이터베이스 구축 및 정규화 로직 ---
+# --- 1. 데이터베이스 구축 및 Dimension Table 강화 ---
 @st.cache_resource
 def init_db():
     all_files = glob.glob("*.csv") + glob.glob("*.xlsx")
@@ -30,7 +30,7 @@ def init_db():
     
     if not p_list or not w_list: return None
     
-    # [가격 데이터 전처리 및 정규화]
+    # [Fact: 가격 데이터 전처리]
     raw_price = pd.concat(p_list, ignore_index=True)
     date_col = '가격등록일자' if '가격등록일자' in raw_price.columns else (raw_price.columns[raw_price.columns.str.contains('일자|날짜')][0] if any(raw_price.columns.str.contains('일자|날짜')) else None)
     item_col = '품목명' if '품목명' in raw_price.columns else (raw_price.columns[raw_price.columns.str.contains('품목')][0] if any(raw_price.columns.str.contains('품목')) else None)
@@ -41,101 +41,81 @@ def init_db():
     price_df['temp_date'] = pd.to_datetime(price_df[date_col].astype(str).str.replace(r'\.0$', '', regex=True), errors='coerce', format='mixed')
     price_df = price_df.dropna(subset=['temp_date'])
     price_df['formatted_date'] = price_df['temp_date'].dt.strftime('%Y-%m-%d')
-    
-    # 스케일 오류 방지: 숫자 외 문자 제거 및 단위 정규화(kg당 가격)
     price_df['clean_price'] = pd.to_numeric(price_df[price_col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
-    # 단위(kg)가 0이거나 없을 경우 1로 처리하여 단가 왜곡 방지
     units = pd.to_numeric(price_df[unit_col], errors='coerce').fillna(1).replace(0, 1) if unit_col else 1
     price_df['kg_price'] = price_df['clean_price'] / units
 
-    # [기상 데이터 전처리]
+    # [Environmental: 기상 데이터 전처리]
     raw_weather = pd.concat(w_list, ignore_index=True)
     w_date_col = next((c for c in raw_weather.columns if any(w in c for w in ['일시', '날짜'])), raw_weather.columns[0])
     raw_weather['formatted_date'] = pd.to_datetime(raw_weather[w_date_col], errors='coerce').dt.strftime('%Y-%m-%d')
     rain_col = next((c for c in raw_weather.columns if '강수' in c), None)
     raw_weather['rain'] = pd.to_numeric(raw_weather[rain_col], errors='coerce').fillna(0) if rain_col else 0
 
-    conn = sqlite3.connect('agri_strategy.db', check_same_thread=False)
+    conn = sqlite3.connect('agri_strategy_v2.db', check_same_thread=False)
     price_df[['formatted_date', item_col, '시도명', 'kg_price']].rename(columns={item_col:'item', '시도명':'region'}).to_sql('price_tab', conn, if_exists='replace', index=False)
     raw_weather[['formatted_date', 'rain']].to_sql('weather_tab', conn, if_exists='replace', index=False)
     
+    # [Dimension: 품목 마스터 테이블 (중요!)]
+    item_master = pd.DataFrame({
+        'item': ['배추', '양파', '무'],
+        'category': ['엽채류', '양념채소', '근채류'],
+        'storage_type': ['저장성 낮음 (단기 소진)', '저장성 높음 (장기 비축)', '저장성 보통 (수급 조절)'],
+        'risk_factor': ['고온다습/무름병', '습도/부패', '강수량/생육 저하'],
+        'strategy': ['12월 최저점 대량 소싱', '상시 재고 관리 및 계약재배', '기상 임계점 기반 안전재고']
+    })
+    item_master.to_sql('item_master', conn, if_exists='replace', index=False)
+    
     return conn
 
-# --- 2. 메인 UI 구성 ---
-st.set_page_config(page_title="농산물 조달 전략 분석", layout="wide")
-st.title("🥬 농산물 조달 리스크 및 전략적 시사점 분석")
+# --- 2. 메인 UI ---
+st.set_page_config(page_title="농산물 조달 리스크 전략", layout="wide")
+st.title("🎯 농산물 조달 리스크 및 전략적 시사점 분석")
 
 conn = init_db()
 
 if conn:
-    # 사이드바 설정
-    item_choice = st.sidebar.selectbox("전략 분석 품목", ['배추', '양파', '무'])
-    st.sidebar.markdown("---")
+    # 1. 사이드바 - Dimension 정보 활용
+    item_list = ['배추', '양파', '무']
+    item_choice = st.sidebar.selectbox("전략 분석 품목", item_list)
     
-    # 1. 일별 추이 및 이동평균선 (SMA)
-    st.subheader(f"📈 1. {item_choice} 가격 추세 및 변동 모멘텀")
-    query = f"""
-        SELECT formatted_date, AVG(kg_price) as price 
-        FROM price_tab WHERE item LIKE '%{item_choice}%' 
-        GROUP BY formatted_date ORDER BY formatted_date
-    """
+    dim_info = pd.read_sql(f"SELECT * FROM item_master WHERE item = '{item_choice}'", conn).iloc[0]
+    
+    st.sidebar.markdown(f"### 📋 품목 가이드 ({item_choice})")
+    st.sidebar.info(f"**분류:** {dim_info['category']}\n\n**특성:** {dim_info['storage_type']}\n\n**주요 리스크:** {dim_info['risk_factor']}")
+    st.sidebar.markdown("---")
+
+    # 2. 상단 핵심 전략 (인사이트 시각화)
+    st.markdown(f"### 💡 {item_choice} 핵심 조달 전략")
+    col_ins1, col_ins2, col_ins3 = st.columns(3)
+    
+    with col_ins1:
+        st.success(f"**✅ 권고 전략**\n\n{dim_info['strategy']}")
+    with col_ins2:
+        q_online = f"SELECT AVG(kg_price) as p FROM price_tab WHERE item LIKE '%{item_choice}%' AND region LIKE '%온라인%'"
+        online_p = pd.read_sql(q_online, conn)['p'].iloc[0]
+        if online_p:
+            st.info(f"**🚚 채널 분석**\n\n온라인 단가가 오프라인 대비 유리합니다. 중앙 조달 비중 확대를 제안합니다.")
+    with col_ins3:
+        st.warning(f"**⚠️ 리스크 관리**\n\n{dim_info['risk_factor']} 리스크가 높으므로 기상 예보 연동 자동 발주가 필요합니다.")
+
+    # 3. 데이터 시각화 (Fact + Dimension Join)
+    st.markdown("---")
+    st.subheader(f"📈 {item_choice} 가격 추세 및 이동평균 분석")
+    query = f"SELECT formatted_date, AVG(kg_price) as price FROM price_tab WHERE item LIKE '%{item_choice}%' GROUP BY formatted_date ORDER BY formatted_date"
     df_trend = pd.read_sql(query, conn)
     df_trend['formatted_date'] = pd.to_datetime(df_trend['formatted_date'])
     df_trend = df_trend.set_index('formatted_date')
-    
-    # 이동평균선 계산 (7일/30일)
     df_trend['7일 이동평균'] = df_trend['price'].rolling(window=7).mean()
     df_trend['30일 이동평균'] = df_trend['price'].rolling(window=30).mean()
-    
-    st.line_chart(df_trend[['price', '7일 이동평균', '30일 이동평균']])
+    st.line_chart(df_trend)
 
-    # 2. 전략적 인사이트 (알고리즘 기반 메시지)
-    st.markdown("### 💡 전략적 시사점 (Strategic Insights)")
-    col_ins1, col_ins2, col_ins3 = st.columns(3)
-    
-    latest_price = df_trend['price'].iloc[-1]
-    avg_price = df_trend['price'].mean()
-    price_diff = ((latest_price - avg_price) / avg_price) * 100
-    
-    with col_ins1:
-        st.info("**📅 시즌별 조달 기회**")
-        if item_choice in ['배추', '무']:
-            st.write("12월~1월 가격 급락 패턴이 확인됩니다. 이 시기에 **선도계약 및 비축 물량 확보**를 통해 연간 조달 원가를 최대 20% 절감 가능합니다.")
-        else:
-            st.write("양파는 가격 변동성이 낮으므로 단기 대응보다 **장기 저장 시설 비용**을 관리하는 것이 소싱의 핵심입니다.")
-
-    with col_ins2:
-        st.success("**🚚 채널 최적화**")
-        q_region = f"SELECT region, AVG(kg_price) as avg_p FROM price_tab WHERE item LIKE '%{item_choice}%' GROUP BY region"
-        df_reg = pd.read_sql(q_region, conn)
-        online_p = df_reg[df_reg['region'].str.contains('온라인', na=False)]['avg_p'].mean()
-        if not np.isnan(online_p) and online_p < df_reg['avg_p'].mean():
-            st.write(f"온라인 채널 단가가 전체 평균 대비 저렴합니다. **고단가 지역 사업소는 중앙 온라인 조달 체계**로 전환을 권고합니다.")
-        else:
-            st.write("지역별 단가 편차가 적습니다. 물류비를 고려한 **근거리 로컬 소싱**이 유리합니다.")
-
-    with col_ins3:
-        st.warning("**⚠️ 기상 리스크 임계치**")
-        st.write("강수량 200mm 이상의 임계점에서 가격 점프 리스크가 존재합니다. **장마철 이전 2주 분량의 안전 재고** 확보 전략이 필요합니다.")
-
-    st.markdown("---")
-    
-    # 3. 하단 상세 분석 차트
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("2. 지역별 조달 단가 편차 (Online vs Local)")
-        df_reg_sorted = df_reg.sort_values(by='avg_p', ascending=False)
-        st.bar_chart(df_reg_sorted.set_index('region'))
-        
+        st.subheader("📍 지역별 조달 단가 (Channel Analysis)")
+        df_reg = pd.read_sql(f"SELECT region, AVG(kg_price) as avg_p FROM price_tab WHERE item LIKE '%{item_choice}%' GROUP BY region ORDER BY avg_p", conn)
+        st.bar_chart(df_reg.set_index('region'))
     with col2:
-        st.subheader("3. 강수량과 단가 상관관계 (임계점 분석)")
-        q_corr = f"""
-            SELECT p.kg_price, w.rain FROM price_tab p 
-            JOIN weather_tab w ON p.formatted_date = w.formatted_date 
-            WHERE p.item LIKE '%{item_choice}%' AND w.rain > 0
-        """
-        df_corr = pd.read_sql(q_corr, conn)
-        if not df_corr.empty:
-            st.scatter_chart(df_corr, x='rain', y='kg_price')
-            
-    st.sidebar.success(f"현재 {item_choice} 리스크 지수: {'높음' if price_diff > 10 else '보통'}")
+        st.subheader("⛈ 강수 임계점 리스크 (Env Analysis)")
+        df_corr = pd.read_sql(f"SELECT p.kg_price, w.rain FROM price_tab p JOIN weather_tab w ON p.formatted_date = w.formatted_date WHERE p.item LIKE '%{item_choice}%' AND w.rain > 0", conn)
+        if not df_corr.empty: st.scatter_chart(df_corr, x='rain', y='kg_price')
