@@ -23,6 +23,7 @@ GitHub 주소: https://github.com/yoonsol530/agri-data-analysis
 데이터 출처: 공공데이터포털 농산물 가격 데이터 및 기상청 전국 강수량 데이터 활용.
 
 -구축된 테이블 (3-Tier)
+
 price_tab (Fact Table): 전국 도매시장별 품목 단가 데이터.
 
 weather_tab (Environmental Table): 일별 전국 평균 강수량 관측 데이터.
