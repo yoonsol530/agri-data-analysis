@@ -2,7 +2,9 @@
 프로젝트 제목: 🥬 농산물 조달 리스크 분석 대시보드
 
 사이트 주소: https://agri-data-analysis-vw9h8xpkaupwrkokqjkswb.streamlit.app/
-GitHub 주소:
+
+GitHub 주소: https://github.com/yoonsol530/agri-data-analysis
+
 프롬프트 링크: https://gemini.google.com/share/3119462bd907
 
 1. 프로젝트 개요
